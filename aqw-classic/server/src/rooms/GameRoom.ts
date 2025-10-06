@@ -4,7 +4,7 @@ import { GameState, PlayerState, MonsterState, DropState } from "./schemas/GameS
 import { ATTACK_RANGE, handleMonsterDeath, tryAttackMonster } from "../logic/Combat";
 import { DEFAULT_DROP_TABLE } from "../logic/DropTable";
 import { updatePlayerPosition } from "../logic/Movement";
-import type { DropModel, MonsterModel, PlayerModel } from "../models";
+import type { DropModel, MonsterModel, PlayerClassId, PlayerModel } from "../models";
 import InMemoryRepository from "../repo/InMemoryRepository";
 import type { PlayerProfile, Repository } from "../repo/Repository";
 import RateLimiter from "../utils/RateLimiter";
@@ -59,6 +59,8 @@ const MAP_CONFIG: Record<
   }
 };
 
+const AVAILABLE_CLASSES: PlayerClassId[] = ["swordsman", "mage"];
+
 const moveSchema = z.object({
   x: z.number().finite().min(-1).max(1),
   y: z.number().finite().min(-1).max(1)
@@ -81,7 +83,7 @@ const equipSchema = z.object({
 });
 
 export class GameRoom extends Room<GameState> {
-  static override filterBy = ["map"];
+  static filterBy = ["map"];
 
   // Pode ser substituído por PostgresRepository posteriormente (ver README para detalhes).
   private repository: Repository;
@@ -115,28 +117,40 @@ export class GameRoom extends Room<GameState> {
     this.onMessage("unequip", (client) => this.handleUnequip(client));
   }
 
-  async onAuth(_client: Client, options: { name?: string }) {
+  async onAuth(_client: Client, options: { name?: string; classId?: string }) {
     const name = this.validateNickname(options.name ?? "Hero");
     const profile = await this.repository.getOrCreatePlayer(name);
+    const classId = this.sanitizeClassId(options.classId, profile.classId);
+    profile.classId = classId;
     return profile;
   }
 
-  async onJoin(client: Client, options: { name?: string }, auth: PlayerProfile) {
+  async onJoin(client: Client, _options: unknown, auth?: PlayerProfile) {
+    const profile = auth ?? {
+      id: client.sessionId,
+      name: "Hero",
+      classId: "swordsman" as PlayerClassId,
+      xp: 0,
+      gold: 0,
+      inventory: [],
+      equippedItemId: undefined
+    };
     const spawnPoint = MAP_CONFIG[this.mapName].spawn;
     const player: PlayerModel = {
       id: client.sessionId,
-      name: auth.name,
+      name: profile.name,
       x: spawnPoint.x,
       y: spawnPoint.y,
       dir: "down",
+      classId: profile.classId,
       hp: 100,
       maxHp: 100,
-      atk: 5 + (auth.equippedItemId ? ITEMS[auth.equippedItemId]?.atkBonus ?? 0 : 0),
+      atk: 5 + (profile.equippedItemId ? ITEMS[profile.equippedItemId]?.atkBonus ?? 0 : 0),
       baseAtk: 5,
-      equippedItemId: auth.equippedItemId,
-      inventory: [...auth.inventory],
-      xp: auth.xp,
-      gold: auth.gold,
+      equippedItemId: profile.equippedItemId,
+      inventory: [...profile.inventory],
+      xp: profile.xp,
+      gold: profile.gold,
       attackCooldownUntil: 0,
       moveIntent: { x: 0, y: 0 }
     };
@@ -154,6 +168,7 @@ export class GameRoom extends Room<GameState> {
       await this.repository.savePlayer({
         id: player.id,
         name: player.name,
+        classId: player.classId,
         xp: player.xp,
         gold: player.gold,
         inventory: [...player.inventory],
@@ -186,6 +201,7 @@ export class GameRoom extends Room<GameState> {
     state.x = player.x;
     state.y = player.y;
     state.dir = player.dir;
+    state.classId = player.classId;
     state.hp = player.hp;
     state.maxHp = player.maxHp;
     state.atk = player.atk;
@@ -289,7 +305,11 @@ export class GameRoom extends Room<GameState> {
     const player = this.players.get(client.sessionId);
     if (!player) return;
     const now = Date.now();
+    if (now < player.attackCooldownUntil) {
+      return;
+    }
     const monster = tryAttackMonster(player, this.monsters, now);
+    this.broadcast("player_attack", { playerId: player.id, dir: player.dir });
     if (monster) {
       if (monster.hp <= 0) {
         handleMonsterDeath(player, monster, DEFAULT_DROP_TABLE, this.drops, now);
@@ -382,6 +402,16 @@ export class GameRoom extends Room<GameState> {
     const safe = name.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
     if (safe.length < 3) return "Hero";
     return safe;
+  }
+
+  private sanitizeClassId(raw: unknown, fallback: PlayerClassId = "swordsman"): PlayerClassId {
+    if (typeof raw !== "string") {
+      return fallback;
+    }
+    const normalized = raw.trim().toLowerCase();
+    return AVAILABLE_CLASSES.includes(normalized as PlayerClassId)
+      ? (normalized as PlayerClassId)
+      : fallback;
   }
 }
 

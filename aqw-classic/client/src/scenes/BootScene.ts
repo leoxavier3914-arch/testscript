@@ -1,13 +1,15 @@
 import Phaser from "phaser";
 
-const ASSET_BASE_PATH = "assets";
+import {
+  CHARACTER_ANIMATION_PRESETS,
+  CHARACTER_ANIMATIONS,
+  CHARACTER_CLASSES,
+  PLAYER_SPRITE_CONFIG,
+  getAnimationKey,
+  REQUIRED_CHARACTER_ASSETS
+} from "../config/characters";
 
-// Spritesheet do player:
-// - grade 8 colunas × 4 linhas
-// - cada quadro 256×256 px
-const PLAYER_FRAME_WIDTH = 256;
-const PLAYER_FRAME_HEIGHT = 256;
-const PLAYER_SHEET_COLUMNS = 8;
+const ASSET_BASE_PATH = "assets";
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -18,13 +20,23 @@ export default class BootScene extends Phaser.Scene {
     const previousPath = this.load.path;
     this.load.setPath(ASSET_BASE_PATH);
 
-    // IMPORTANTE: use o arquivo baixado e salve como "assets/char.png"
-    // (8×4 frames = 2048×1024, sem margin/spacing)
-    this.load.spritesheet("player", "char.png", {
-      frameWidth: PLAYER_FRAME_WIDTH,
-      frameHeight: PLAYER_FRAME_HEIGHT,
-      // margin: 0,
-      // spacing: 0,
+    if (import.meta.env.DEV) {
+      console.info(
+        "[BootScene] Assets de personagens necessários:",
+        REQUIRED_CHARACTER_ASSETS.map((asset) => asset.file).join(", ")
+      );
+    }
+
+    // IMPORTANTE: os arquivos abaixo precisam existir na pasta assets/.
+    // Veja a lista completa em REQUIRED_CHARACTER_ASSETS (config/characters.ts).
+    Object.values(CHARACTER_CLASSES).forEach((definition) => {
+      this.load.spritesheet(definition.textureKey, definition.assetPath, {
+        frameWidth: PLAYER_SPRITE_CONFIG.frameWidth,
+        frameHeight: PLAYER_SPRITE_CONFIG.frameHeight,
+      });
+      if (definition.attackEffect) {
+        this.load.image(definition.attackEffect.textureKey, definition.attackEffect.assetPath);
+      }
     });
 
     // Demais assets estáticos
@@ -36,7 +48,7 @@ export default class BootScene extends Phaser.Scene {
   }
 
   create() {
-    this.createPlayerAnimations();
+    this.createCharacterAnimations();
     this.scene.start("HubScene");
   }
 
@@ -45,7 +57,7 @@ export default class BootScene extends Phaser.Scene {
    * Ex.: (row=1, col=0) => frame 8, (row=1, col=7) => frame 15.
    */
   private idx(row: number, col: number) {
-    return row * PLAYER_SHEET_COLUMNS + col;
+    return row * PLAYER_SPRITE_CONFIG.columns + col;
   }
 
   /** Retorna um array de frames [colStart..colEnd] dentro da linha dada. */
@@ -55,53 +67,28 @@ export default class BootScene extends Phaser.Scene {
     return out;
   }
 
-  private createPlayerAnimations() {
-    if (this.anims.exists("player-idle")) return;
+  private createCharacterAnimations() {
+    const sampleKey = getAnimationKey("swordsman", "idle");
+    if (this.anims.exists(sampleKey)) {
+      return;
+    }
 
-    // Mapeamento por linhas do spritesheet (8 frames por ação):
-    // Linha 0: IDLE   -> cols 0..7
-    // Linha 1: RUN    -> cols 0..7
-    // Linha 2: ATTACK -> cols 0..7
-    // Linha 3: PICKUP -> cols 0..7
-
-    // IDLE — respiração sutil
-    this.anims.create({
-      key: "player-idle",
-      frames: this.anims.generateFrameNumbers("player", {
-        frames: this.rowRange(0, 0, 7),
-      }),
-      frameRate: 6,
-      repeat: -1
-    });
-
-    // RUN — ciclo completo (contact → down → passing → up)
-    this.anims.create({
-      key: "player-run",
-      frames: this.anims.generateFrameNumbers("player", {
-        frames: this.rowRange(1, 0, 7),
-      }),
-      frameRate: 12, // pode ir até 14 para mais velocidade
-      repeat: -1
-    });
-
-    // ATTACK — antecipação → golpe com trilha → recuperação
-    this.anims.create({
-      key: "player-attack",
-      frames: this.anims.generateFrameNumbers("player", {
-        frames: this.rowRange(2, 0, 7),
-      }),
-      frameRate: 14,
-      repeat: 0
-    });
-
-    // PICKUP — agacha, pega item (livro brilhante), retorna
-    this.anims.create({
-      key: "player-pickup",
-      frames: this.anims.generateFrameNumbers("player", {
-        frames: this.rowRange(3, 0, 7),
-      }),
-      frameRate: 10,
-      repeat: 0
+    Object.values(CHARACTER_CLASSES).forEach((definition) => {
+      CHARACTER_ANIMATIONS.forEach((animation) => {
+        const config = CHARACTER_ANIMATION_PRESETS[animation];
+        const key = getAnimationKey(definition.id, animation);
+        if (this.anims.exists(key)) {
+          return;
+        }
+        this.anims.create({
+          key,
+          frames: this.anims.generateFrameNumbers(definition.textureKey, {
+            frames: this.rowRange(config.row, 0, 7),
+          }),
+          frameRate: config.frameRate,
+          repeat: config.repeat
+        });
+      });
     });
   }
 }

@@ -1,6 +1,9 @@
+import type { PlayerClassId } from "../models";
+
 export interface PlayerProfile {
   id: string;
   name: string;
+  classId: PlayerClassId;
   xp: number;
   gold: number;
   inventory: string[];

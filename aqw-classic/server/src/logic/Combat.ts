@@ -27,9 +27,10 @@ export function tryAttackMonster(
   if (!target) {
     return null;
   }
+  const targetMonster = target as MonsterModel;
   const damage = Math.max(1, player.atk);
-  target.hp = Math.max(0, target.hp - damage);
-  return target;
+  targetMonster.hp = Math.max(0, targetMonster.hp - damage);
+  return targetMonster;
 }
 
 export function handleMonsterDeath(

@@ -1,4 +1,5 @@
 export type Direction = "up" | "down" | "left" | "right" | "idle";
+export type PlayerClassId = "swordsman" | "mage";
 
 export interface Item {
   id: string;
@@ -17,6 +18,7 @@ export interface PlayerModel {
   x: number;
   y: number;
   dir: Direction;
+  classId: PlayerClassId;
   hp: number;
   maxHp: number;
   atk: number;

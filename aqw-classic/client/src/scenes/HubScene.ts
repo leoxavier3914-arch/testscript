@@ -7,8 +7,13 @@ import {
   sendMovement,
   waitForRoom
 } from "../net/connection";
+import {
+  getAnimationKey,
+  getAttackEffectConfig,
+  getCharacterTextureKey
+} from "../config/characters";
 import ChatUI from "../ui/ChatUI";
-import type { DropState, PlayerState, Snapshot } from "../types";
+import type { Direction, DropState, PlayerClassId, PlayerState, Snapshot } from "../types";
 
 type PlayerEntity = {
   sprite: Phaser.GameObjects.Sprite;
@@ -18,6 +23,9 @@ type PlayerEntity = {
   currentAnim: string;
   isActionLocked: boolean;
   onActionComplete?: () => void;
+  classId: PlayerClassId;
+  lastDir: Direction;
+  lastServerDir: Direction;
 };
 
 type MonsterEntity = {
@@ -94,6 +102,14 @@ export default class HubScene extends Phaser.Scene {
         this.syncState(snapshot);
       })
     );
+    this.unlisten.push(
+      on("playerAttack", ({ playerId, dir }) => {
+        if (playerId === getSessionId()) {
+          return;
+        }
+        this.triggerPlayerAction(playerId, "attack", dir);
+      })
+    );
   }
 
   private addGround() {
@@ -151,14 +167,20 @@ export default class HubScene extends Phaser.Scene {
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
-      this.triggerLocalAction("player-attack");
+      const sessionId = getSessionId();
+      if (sessionId) {
+        this.triggerPlayerAction(sessionId, "attack", this.localState?.dir);
+      }
       sendAttack();
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       const drop = this.findDropNearPlayer();
       if (drop) {
-        this.triggerLocalAction("player-pickup");
+        const sessionId = getSessionId();
+        if (sessionId) {
+          this.triggerPlayerAction(sessionId, "pickup", this.localState?.dir);
+        }
         requestPickup(drop.id);
       }
     }
@@ -343,25 +365,35 @@ export default class HubScene extends Phaser.Scene {
     }
   }
 
-  private updatePlayerAnimation(player: PlayerState, entity: PlayerEntity, force = false) {
+  private updatePlayerAnimation(player: PlayerState | null, entity: PlayerEntity, force = false) {
     const sprite = entity.sprite;
+    const dir: Direction = player?.dir ?? entity.lastServerDir;
+    if (player) {
+      entity.lastServerDir = player.dir;
+    }
     if (entity.isActionLocked && !force) {
-      if (player.dir === "left") {
+      if (dir === "left") {
         sprite.setFlipX(true);
-      } else if (player.dir === "right") {
+      } else if (dir === "right") {
         sprite.setFlipX(false);
       }
       return;
     }
 
-    if (player.dir === "left") {
+    if (dir === "left") {
       sprite.setFlipX(true);
-    } else if (player.dir === "right") {
+    } else if (dir === "right") {
       sprite.setFlipX(false);
     }
 
-    const shouldRun = player.dir !== "idle";
-    const nextKey = shouldRun ? "player-run" : "player-idle";
+    if (dir !== "idle") {
+      entity.lastDir = dir;
+    }
+
+    entity.lastServerDir = dir;
+
+    const shouldRun = dir !== "idle";
+    const nextKey = getAnimationKey(entity.classId, shouldRun ? "run" : "idle");
     if (force || entity.currentAnim !== nextKey) {
       if (force) {
         sprite.anims.play(nextKey);
@@ -372,9 +404,12 @@ export default class HubScene extends Phaser.Scene {
     }
   }
 
-  private triggerLocalAction(key: "player-attack" | "player-pickup") {
-    const sessionId = getSessionId();
-    const entity = this.playerEntities.get(sessionId);
+  private triggerPlayerAction(
+    playerId: string,
+    action: "attack" | "pickup",
+    dir?: Direction
+  ) {
+    const entity = this.playerEntities.get(playerId);
     if (!entity) {
       return;
     }
@@ -385,18 +420,72 @@ export default class HubScene extends Phaser.Scene {
     }
 
     entity.isActionLocked = true;
-    entity.currentAnim = key;
-    sprite.anims.play(key);
+    const animationKey = getAnimationKey(entity.classId, action);
+    entity.currentAnim = animationKey;
+    sprite.anims.play(animationKey);
+    if (dir) {
+      entity.lastServerDir = dir;
+      if (dir !== "idle") {
+        entity.lastDir = dir;
+      }
+    }
+    if (action === "attack") {
+      this.spawnAttackEffect(entity);
+    }
     const callback = () => {
       entity.isActionLocked = false;
       entity.onActionComplete = undefined;
-      const localState = this.localState;
-      if (localState) {
-        this.updatePlayerAnimation(localState, entity, true);
-      }
+      const referenceState = playerId === getSessionId() ? this.localState ?? null : null;
+      this.updatePlayerAnimation(referenceState, entity, true);
     };
     entity.onActionComplete = callback;
     sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, callback);
+  }
+
+  private spawnAttackEffect(entity: PlayerEntity) {
+    const effect = getAttackEffectConfig(entity.classId);
+    if (!effect) {
+      return;
+    }
+    const direction = this.getEntityDirectionVector(entity);
+    const sprite = entity.sprite;
+    const startX = sprite.x + direction.x * 36;
+    const startY = sprite.y - sprite.displayHeight * 0.5 + direction.y * 36;
+    const projectile = this.add.image(startX, startY, effect.textureKey);
+    projectile.setScale(effect.scale);
+    projectile.setAlpha(0.9);
+    projectile.setDepth(sprite.depth + 2);
+    const targetX = startX + direction.x * effect.travelDistance;
+    const targetY = startY + direction.y * effect.travelDistance;
+    this.tweens.add({
+      targets: projectile,
+      x: targetX,
+      y: targetY,
+      alpha: 0,
+      duration: effect.lifespan,
+      onComplete: () => {
+        projectile.destroy();
+      }
+    });
+  }
+
+  private getEntityDirectionVector(entity: PlayerEntity) {
+    let dir = entity.lastDir;
+    if (dir === "idle") {
+      dir = entity.sprite.flipX ? "left" : "right";
+    }
+    switch (dir) {
+      case "left":
+        return new Phaser.Math.Vector2(-1, 0);
+      case "right":
+        return new Phaser.Math.Vector2(1, 0);
+      case "up":
+        return new Phaser.Math.Vector2(0, -1);
+      case "down":
+        return new Phaser.Math.Vector2(0, 1);
+      default:
+        return new Phaser.Math.Vector2(1, 0);
+    }
   }
 
   private syncState(snapshot: Snapshot) {
@@ -407,10 +496,12 @@ export default class HubScene extends Phaser.Scene {
     Object.values(snapshot.players).forEach((player) => {
       let entity = this.playerEntities.get(player.id);
       if (!entity) {
-        const sprite = this.add.sprite(player.x, player.y, "player");
+        const textureKey = getCharacterTextureKey(player.classId);
+        const sprite = this.add.sprite(player.x, player.y, textureKey);
         sprite.setScale(0.4);
         sprite.setOrigin(0.5, 0.88);
-        sprite.anims.play("player-idle");
+        const idleKey = getAnimationKey(player.classId, "idle");
+        sprite.anims.play(idleKey);
         this.updateEntityDepth(sprite);
         const label = this.add
           .text(player.x, player.y, player.name, {
@@ -426,10 +517,20 @@ export default class HubScene extends Phaser.Scene {
           label,
           targetX: player.x,
           targetY: player.y,
-          currentAnim: "player-idle",
-          isActionLocked: false
+          currentAnim: idleKey,
+          isActionLocked: false,
+          classId: player.classId,
+          lastDir: player.dir !== "idle" ? player.dir : "down",
+          lastServerDir: player.dir
         };
         this.playerEntities.set(player.id, entity);
+      }
+      if (entity.classId !== player.classId) {
+        entity.classId = player.classId;
+        const textureKey = getCharacterTextureKey(player.classId);
+        entity.sprite.setTexture(textureKey);
+        entity.currentAnim = "";
+        this.updatePlayerAnimation(player, entity, true);
       }
       entity.targetX = player.x;
       entity.targetY = player.y;
@@ -441,6 +542,10 @@ export default class HubScene extends Phaser.Scene {
         this.localState = player;
         this.cameras.main.startFollow(entity.sprite, false, 0.08, 0.08);
       }
+      if (player.dir !== "idle") {
+        entity.lastDir = player.dir;
+      }
+      entity.lastServerDir = player.dir;
       this.updatePlayerAnimation(player, entity);
       existingIds.delete(player.id);
     });
