@@ -33,9 +33,11 @@ let playerClassId: PlayerClassId = "swordsman";
 let colyseusClient: Client | null = null;
 let roomResolver: ((room: Room) => void) | null = null;
 let roomRejecter: ((reason?: unknown) => void) | null = null;
+let roomReady: Promise<Room> | null = null;
 
 const AVAILABLE_CLASSES: PlayerClassId[] = ["swordsman", "mage"];
 const CLASS_STORAGE_KEY = "aqw-classic:player-class";
+const NAME_STORAGE_KEY = "aqw-classic:player-name";
 
 const normalizeClassId = (raw?: string | null): PlayerClassId | null => {
   if (!raw) return null;
@@ -62,32 +64,46 @@ const storeClass = (classId: PlayerClassId) => {
   }
 };
 
-const promptForClass = (defaultClass: PlayerClassId): PlayerClassId => {
-  const options = AVAILABLE_CLASSES.join("/");
-  const input = prompt(`Escolha uma classe (${options}):`, defaultClass) ?? defaultClass;
-  return normalizeClassId(input) ?? defaultClass;
+const readStoredName = (): string => {
+  try {
+    return window.localStorage.getItem(NAME_STORAGE_KEY) ?? "Hero";
+  } catch {
+    return "Hero";
+  }
 };
 
-const roomReady = new Promise<Room>((resolve, reject) => {
-  roomResolver = resolve;
-  roomRejecter = reject;
-  void connectInternal();
-});
+const storeName = (name: string) => {
+  try {
+    window.localStorage.setItem(NAME_STORAGE_KEY, name);
+  } catch {
+    /* ignore */
+  }
+};
+
+const ensureRoomPromise = () => {
+  if (!roomReady) {
+    roomReady = new Promise<Room>((resolve, reject) => {
+      roomResolver = resolve;
+      roomRejecter = reject;
+    });
+  }
+  return roomReady;
+};
 
 // Responsável por (re)entrar na sala apropriada, inclusive quando o servidor pede /join.
 async function connectInternal(map: string = currentMap) {
   try {
     if (!colyseusClient) {
-      const nickname = prompt("Escolha um nickname (3-16 alfanumérico):", "Hero") || "Hero";
-      playerName = sanitizeNickname(nickname);
       colyseusClient = new Client(import.meta.env.VITE_SERVER_URL ?? "ws://localhost:2567");
-      playerClassId = promptForClass(readStoredClass());
-      storeClass(playerClassId);
     }
     await joinRoom(map);
   } catch (error) {
     emit("error", (error as Error)?.message ?? "Unknown error");
     roomRejecter?.(error);
+    roomResolver = null;
+    roomRejecter = null;
+    roomReady = null;
+    throw error;
   }
 }
 
@@ -109,6 +125,8 @@ async function joinRoom(map: string) {
   registerRoomHandlers(room);
   emit("joined", { sessionId, map: currentMap });
   roomResolver?.(room);
+  roomResolver = null;
+  roomRejecter = null;
 }
 
 function registerRoomHandlers(activeRoom: Room) {
@@ -137,9 +155,21 @@ function registerRoomHandlers(activeRoom: Room) {
   });
 }
 
-export const connectToServer = async () => roomReady;
+export const connectToServer = async (profile: { name: string; classId: PlayerClassId }) => {
+  playerName = sanitizeNickname(profile.name);
+  playerClassId = profile.classId;
+  storeName(playerName);
+  storeClass(playerClassId);
+  const promise = ensureRoomPromise();
+  await connectInternal();
+  return promise;
+};
 
-export const waitForRoom = () => roomReady;
+export const waitForRoom = () => ensureRoomPromise();
+
+export const getStoredPlayerName = () => readStoredName();
+
+export const getStoredPlayerClass = () => readStoredClass();
 
 export const getRoom = () => room;
 
