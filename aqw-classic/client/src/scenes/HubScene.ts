@@ -81,13 +81,27 @@ export default class HubScene extends Phaser.Scene {
   }
 
   private addGround() {
-    const colors = [0x1e272e, 0x2f3640];
-    const tileSize = 128;
-    for (let y = 0; y < 1080; y += tileSize) {
-      for (let x = 0; x < 1920; x += tileSize) {
-        const color = colors[(x / tileSize + y / tileSize) % colors.length];
-        const rect = this.add.rectangle(x + tileSize / 2, y + tileSize / 2, tileSize, tileSize, color);
-        rect.setStrokeStyle(2, 0x121212);
+    const scale = 0.35;
+    const texture = this.textures.get("ground-tile");
+    const frame = texture.get();
+    if (!frame) {
+      return;
+    }
+    const tileWidth = frame.width * scale;
+    const tileHeight = frame.height * scale * 0.5;
+    const rows = 14;
+    const cols = 14;
+    const centerX = 960;
+    const centerY = 360;
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const isoX = centerX + (col - row) * (tileWidth / 2);
+        const isoY = centerY + (col + row) * (tileHeight / 2);
+        const tile = this.add.image(isoX, isoY, "ground-tile");
+        tile.setScale(scale);
+        tile.setOrigin(0.5, 0.9);
+        tile.setDepth(-1000);
       }
     }
   }
@@ -136,16 +150,19 @@ export default class HubScene extends Phaser.Scene {
     this.playerEntities.forEach((entity, id) => {
       if (id === getSessionId()) {
         entity.sprite.setPosition(this.localState!.x, this.localState!.y);
-        entity.label.setPosition(entity.sprite.x - 32, entity.sprite.y - 48);
       } else {
         entity.sprite.x = Phaser.Math.Linear(entity.sprite.x, entity.targetX, INTERPOLATION_SPEED);
         entity.sprite.y = Phaser.Math.Linear(entity.sprite.y, entity.targetY, INTERPOLATION_SPEED);
-        entity.label.setPosition(entity.sprite.x - 32, entity.sprite.y - 48);
       }
+      this.updateEntityDepth(entity.sprite);
+      entity.label.setDepth(entity.sprite.depth + 1);
+      this.positionLabel(entity.label, entity.sprite);
     });
 
     this.monsterEntities.forEach((entity) => {
-      entity.label.setPosition(entity.sprite.x - 32, entity.sprite.y - 48);
+      this.updateEntityDepth(entity.sprite);
+      entity.label.setDepth(entity.sprite.depth + 1);
+      this.positionLabel(entity.label, entity.sprite, 8);
     });
   }
 
@@ -174,18 +191,27 @@ export default class HubScene extends Phaser.Scene {
       let entity = this.playerEntities.get(player.id);
       if (!entity) {
         const sprite = this.add.image(player.x, player.y, "player");
-        sprite.setDisplaySize(48, 48);
-        const label = this.add.text(player.x - 32, player.y - 48, player.name, {
-          fontSize: "14px",
-          color: "#ffffff",
-          fontFamily: "monospace"
-        });
+        sprite.setScale(0.4);
+        sprite.setOrigin(0.5, 0.88);
+        this.updateEntityDepth(sprite);
+        const label = this.add
+          .text(player.x, player.y, player.name, {
+            fontSize: "14px",
+            color: "#ffffff",
+            fontFamily: "monospace"
+          })
+          .setOrigin(0.5, 1);
+        label.setDepth(sprite.depth + 1);
+        this.positionLabel(label, sprite);
         entity = { sprite, label, targetX: player.x, targetY: player.y };
         this.playerEntities.set(player.id, entity);
       }
       entity.targetX = player.x;
       entity.targetY = player.y;
       entity.label.setText(player.name);
+      this.updateEntityDepth(entity.sprite);
+      entity.label.setDepth(entity.sprite.depth + 1);
+      this.positionLabel(entity.label, entity.sprite);
       if (player.id === sessionId) {
         this.localState = player;
         this.cameras.main.startFollow(entity.sprite, false, 0.08, 0.08);
@@ -205,18 +231,27 @@ export default class HubScene extends Phaser.Scene {
       let entity = this.monsterEntities.get(monster.id);
       if (!entity) {
         const sprite = this.add.image(monster.x, monster.y, "monster");
-        sprite.setDisplaySize(56, 56);
-        const label = this.add.text(monster.x - 32, monster.y - 48, monster.type, {
-          fontSize: "12px",
-          color: "#ffb3b3",
-          fontFamily: "monospace"
-        });
+        sprite.setScale(0.35);
+        sprite.setOrigin(0.5, 0.88);
+        this.updateEntityDepth(sprite);
+        const label = this.add
+          .text(monster.x, monster.y, monster.type, {
+            fontSize: "12px",
+            color: "#ffb3b3",
+            fontFamily: "monospace"
+          })
+          .setOrigin(0.5, 1);
+        label.setDepth(sprite.depth + 1);
+        this.positionLabel(label, sprite, 8);
         entity = { sprite, label };
         this.monsterEntities.set(monster.id, entity);
       } else {
         entity.sprite.setPosition(monster.x, monster.y);
       }
+      this.updateEntityDepth(entity.sprite);
       entity.label.setText(`${monster.type} (${monster.hp}/${monster.maxHp})`);
+      entity.label.setDepth(entity.sprite.depth + 1);
+      this.positionLabel(entity.label, entity.sprite, 8);
       monsterIds.delete(monster.id);
     });
     monsterIds.forEach((id) => {
@@ -233,12 +268,15 @@ export default class HubScene extends Phaser.Scene {
       let entity = this.dropEntities.get(drop.id);
       if (!entity) {
         const sprite = this.add.image(drop.x, drop.y, "drop");
-        sprite.setDisplaySize(32, 32);
+        sprite.setScale(0.32);
+        sprite.setOrigin(0.5, 0.9);
+        this.updateEntityDepth(sprite, -5);
         entity = { sprite };
         this.dropEntities.set(drop.id, entity);
       } else {
         entity.sprite.setPosition(drop.x, drop.y);
       }
+      this.updateEntityDepth(entity.sprite, -5);
       dropIds.delete(drop.id);
     });
     dropIds.forEach((id) => {
@@ -251,5 +289,14 @@ export default class HubScene extends Phaser.Scene {
   destroy() {
     this.unlisten.forEach((fn) => fn());
     this.chatUI?.destroy();
+  }
+
+  private updateEntityDepth(sprite: Phaser.GameObjects.Image, offset = 0) {
+    sprite.setDepth(sprite.y + offset);
+  }
+
+  private positionLabel(label: Phaser.GameObjects.Text, sprite: Phaser.GameObjects.Image, padding = 12) {
+    const top = sprite.y - sprite.displayHeight * sprite.originY;
+    label.setPosition(sprite.x, top - padding);
   }
 }

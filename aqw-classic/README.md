@@ -72,7 +72,10 @@ aqw-classic/
       scenes/BootScene.ts
       scenes/HubScene.ts
       ui/ChatUI.ts
-      assets/ (placeholders gerados via código)
+    public/
+      assets/
+        kenney/
+          (adicione aqui os PNGs extraídos do pack Kenney Isometric Miniature Dungeon)
   server/
     package.json
     tsconfig.json
@@ -107,4 +110,10 @@ Comentários in-line destacam pontos de ampliação. Recomendações gerais:
 - O servidor é autoritativo: o cliente envia apenas intenções (`move`, `attack`, `pickup` etc.) validadas por Zod.
 - Interpolação no cliente suaviza o movimento dos outros jogadores.
 - Antispam: `RateLimiter` aplicado a chat e entradas de movimento/ataque.
-- Arte placeholder é gerada em tempo real via `Phaser.Graphics`, sem assets externos.
+- Arte do cliente carrega sprites do pack Kenney Isometric Miniature Dungeon.
+
+## Arte
+
+- Pack **Kenney Isometric Miniature Dungeon** (CC0): copie manualmente `player.png`, `monster.png`, `drop.png` e `ground-tile.png` para `client/public/assets/kenney`.
+- O diretório inclui `README.txt` com a lista de arquivos esperados e `LICENSE.txt` do pack; mantenha ambos junto aos sprites.
+- Os nomes dos arquivos devem permanecer exatamente como listados para que o carregamento na `BootScene` funcione.
