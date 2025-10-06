@@ -114,22 +114,25 @@ Comentários in-line destacam pontos de ampliação. Recomendações gerais:
 
 ## Arte
 
-Os sprites binários não são versionados. Adicione manualmente a pasta `client/public/assets` antes de rodar o cliente:
+Os sprites vivem em `client/src/assets/`. Para substituir por arte própria, mantenha os nomes dos arquivos e respeite as dimensões/grades descritas abaixo.
 
-- **Personagem principal (`char.png`)** – sprite sheet de 12 quadros (256×256 px) com corrida, ataque e coleta.
-- **Itens dropados (`drop.png`)** – ícone usado nos objetos coletáveis.
-- **Monstro (`monster.png`)** – sprite estático do inimigo do hub.
-- **Chão (`ground-tile.png`)** – tile base do mapa.
+- **Personagem principal (`char.png`)** – sprite sheet de 12 quadros distribuídos em uma grade 4×3. Cada quadro tem o mesmo tamanho. As animações usam os seguintes índices (contando da esquerda para a direita e de cima para baixo):
+  - `0` → idle.
+  - `0,1,2` → corrida (loop).
+  - `3,4,5,6` → ataque (toca uma vez).
+  - `7,8,9,10,11` → animação de coleta (toca uma vez).
+  Ajuste a largura/altura do quadro em `BootScene.preload` (`frameWidth`/`frameHeight`) caso utilize um spritesheet com dimensões diferentes de 256×256 px.
+- **Itens dropados (`drop.png`)** – ícone estático exibido quando um loot cai no chão.
+- **Monstro (`monster.png`)** – sprite estático do slime inimigo do hub.
+- **Chão (`ground-tile.png`)** – tile isométrico usado para preencher o piso. Use um PNG quadrado/losangular pensado para repetição. Gere o arquivo copiando `Isometric/stoneTile_S.png` (do pack Kenney Isometric Miniature Dungeon) para `client/src/assets/ground-tile.png`.
 
-O diretório `client/public/assets/kenney` já contém `LICENSE.txt` e `README.txt` originais do pack Kenney; mantenha-os ao lado dos sprites.
+O diretório `client/public/assets/kenney` já contém `LICENSE.txt` e `README.txt` originais do pack Kenney; mantenha-os ao lado dos sprites se importar novos arquivos.
 
-> Os nomes dos arquivos precisam permanecer exatamente como listados para que o carregamento na `BootScene` funcione.
+### Versionando PNGs
 
-### Como versionar PNGs
-
-1. Coloque os arquivos dentro de `aqw-classic/client/public/assets/` (ou subpastas).
-2. Rode `git status` para confirmar que o PNG aparece como "untracked".
+1. Coloque os arquivos dentro de `aqw-classic/client/src/assets/`.
+2. Rode `git status` para confirmar que o PNG aparece como "untracked" ou "modified".
 3. Adicione-o ao repositório com `git add caminho/do/arquivo.png`.
-4. Faça o commit normalmente (`git commit -m "Adiciona novo sprite"`).
+4. Faça o commit normalmente (`git commit -m "Atualiza sprite"`).
 
 > **Dica:** não há bloqueio para binários; se o PNG não aparecer no `git status`, verifique se o nome foi escrito corretamente e se não existe nenhuma entrada em `.gitignore` correspondendo ao caminho.

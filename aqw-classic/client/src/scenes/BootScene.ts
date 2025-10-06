@@ -1,6 +1,9 @@
 import Phaser from "phaser";
 
 const ASSET_BASE_PATH = "assets";
+// Ajuste estas constantes se trocar o spritesheet do personagem.
+const PLAYER_FRAME_WIDTH = 256;
+const PLAYER_FRAME_HEIGHT = 256;
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -11,8 +14,8 @@ export default class BootScene extends Phaser.Scene {
     const previousPath = this.load.path;
     this.load.setPath(ASSET_BASE_PATH);
     this.load.spritesheet("player", "char.png", {
-      frameWidth: 256,
-      frameHeight: 256
+      frameWidth: PLAYER_FRAME_WIDTH,
+      frameHeight: PLAYER_FRAME_HEIGHT
     });
     this.load.image("monster", "monster.png");
     this.load.image("drop", "drop.png");
