@@ -8,6 +8,7 @@ export default class BootScene extends Phaser.Scene {
   }
 
   preload() {
+    const previousPath = this.load.path;
     this.load.setPath(ASSET_BASE_PATH);
     this.load.spritesheet("player", "char.png", {
       frameWidth: 256,
@@ -16,7 +17,7 @@ export default class BootScene extends Phaser.Scene {
     this.load.image("monster", "monster.png");
     this.load.image("drop", "drop.png");
     this.load.image("ground-tile", "ground-tile.png");
-    this.load.resetPath();
+    this.load.setPath(previousPath ?? "");
   }
 
   create() {
