@@ -1,4 +1,5 @@
 import { MapSchema, Schema, type } from "@colyseus/schema";
+import type { PlayerClassId } from "../../models";
 
 export class PlayerState extends Schema {
   @type("string")
@@ -11,6 +12,8 @@ export class PlayerState extends Schema {
   y = 0;
   @type("string")
   dir: string = "idle";
+  @type("string")
+  classId: PlayerClassId = "swordsman";
   @type("number")
   hp = 100;
   @type("number")

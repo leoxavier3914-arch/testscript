@@ -10,6 +10,7 @@ export class InMemoryRepository implements Repository {
       profile = {
         id: randomUUID(),
         name,
+        classId: "swordsman",
         xp: 0,
         gold: 0,
         inventory: [],

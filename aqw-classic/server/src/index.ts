@@ -13,14 +13,7 @@ const httpServer = createServer();
 
 const gameServer = new Server({
   transport: new WebSocketTransport({
-    server: httpServer,
-    options: {
-      cors: {
-        origin: corsOrigin,
-        allowedHeaders: ["*"],
-        methods: ["GET", "POST"]
-      }
-    }
+    server: httpServer
   })
 });
 
