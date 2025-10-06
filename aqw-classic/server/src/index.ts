@@ -2,7 +2,7 @@ import { createServer } from "http";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import dotenv from "dotenv";
-import GameRoom from "./rooms/GameRoom.js";
+import GameRoom from "./rooms/GameRoom";
 
 dotenv.config();
 
