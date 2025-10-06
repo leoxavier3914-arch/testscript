@@ -37,9 +37,21 @@ export const CHARACTER_CLASSES: Record<PlayerClassId, CharacterClassDefinition> 
 } as const;
 
 export const REQUIRED_CHARACTER_ASSETS = [
-  { file: "char.png", description: "Spritesheet 8x4 do espadachim (256px por quadro)" },
-  { file: "mage.png", description: "Spritesheet 8x4 do mago (256px por quadro)" },
-  { file: "mage-projectile.png", description: "Sprite da magia disparada pelo mago" }
+  {
+    file: "char.png",
+    description: "Spritesheet 8x4 do espadachim (256px por quadro)",
+    publicPath: "/assets/char.png"
+  },
+  {
+    file: "mage.png",
+    description: "Spritesheet 8x4 do mago (256px por quadro)",
+    publicPath: "/assets/mage.png"
+  },
+  {
+    file: "mage-projectile.png",
+    description: "Sprite da magia disparada pelo mago",
+    publicPath: "/assets/mage-projectile.png"
+  }
 ] as const;
 
 export const CHARACTER_ANIMATIONS = ["idle", "run", "attack", "pickup"] as const;

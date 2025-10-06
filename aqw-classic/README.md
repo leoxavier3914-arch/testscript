@@ -114,7 +114,12 @@ Comentários in-line destacam pontos de ampliação. Recomendações gerais:
 
 ## Arte
 
-Os sprites vivem em `client/src/assets/`. Para substituir por arte própria, mantenha os nomes dos arquivos e respeite as dimensões/grades descritas abaixo.
+Os sprites não são versionados. Antes de compilar o cliente, copie-os para **duas pastas**:
+
+1. `client/src/assets/` – referência local para edição.
+2. `client/public/assets/` – arquivos servidos pelo Vite em `/assets/...`.
+
+Para substituir por arte própria, mantenha os nomes dos arquivos e respeite as dimensões/grades descritas abaixo.
 
 - **Personagem principal (`char.png`)** – sprite sheet de 12 quadros distribuídos em uma grade 4×3. Cada quadro tem o mesmo tamanho. As animações usam os seguintes índices (contando da esquerda para a direita e de cima para baixo):
   - `0` → idle.

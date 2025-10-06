@@ -23,11 +23,11 @@ export default class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       console.info(
         "[BootScene] Assets de personagens necessários:",
-        REQUIRED_CHARACTER_ASSETS.map((asset) => asset.file).join(", ")
+        REQUIRED_CHARACTER_ASSETS.map((asset) => `${asset.file} → ${asset.publicPath}`).join(", ")
       );
     }
 
-    // IMPORTANTE: os arquivos abaixo precisam existir na pasta assets/.
+    // IMPORTANTE: os arquivos abaixo precisam existir em `client/public/assets/`.
     // Veja a lista completa em REQUIRED_CHARACTER_ASSETS (config/characters.ts).
     Object.values(CHARACTER_CLASSES).forEach((definition) => {
       this.load.spritesheet(definition.textureKey, definition.assetPath, {

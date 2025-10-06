@@ -13,6 +13,7 @@ import {
   getCharacterTextureKey
 } from "../config/characters";
 import ChatUI from "../ui/ChatUI";
+import InventoryUI from "../ui/InventoryUI";
 import type { Direction, DropState, PlayerClassId, PlayerState, Snapshot } from "../types";
 
 type PlayerEntity = {
@@ -61,7 +62,9 @@ export default class HubScene extends Phaser.Scene {
   private wasd!: { [key: string]: Phaser.Input.Keyboard.Key };
   private attackKey!: Phaser.Input.Keyboard.Key;
   private interactKey!: Phaser.Input.Keyboard.Key;
+  private inventoryKey!: Phaser.Input.Keyboard.Key;
   private chatUI?: ChatUI;
+  private inventoryUI?: InventoryUI;
   private unlisten: (() => void)[] = [];
   private playerEntities = new Map<string, PlayerEntity>();
   private monsterEntities = new Map<string, MonsterEntity>();
@@ -90,8 +93,10 @@ export default class HubScene extends Phaser.Scene {
     };
     this.attackKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.inventoryKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.I);
 
     this.chatUI = new ChatUI();
+    this.inventoryUI = new InventoryUI();
 
     this.createHud();
 
@@ -183,6 +188,10 @@ export default class HubScene extends Phaser.Scene {
         }
         requestPickup(drop.id);
       }
+    }
+
+    if (Phaser.Input.Keyboard.JustDown(this.inventoryKey)) {
+      this.inventoryUI?.toggle();
     }
   }
 
@@ -294,6 +303,8 @@ export default class HubScene extends Phaser.Scene {
       `Inventário: ${inventoryText}`
     ];
     this.hudStatsText.setText(statsLines.join("\n"));
+
+    this.inventoryUI?.setItems(inventory, equippedItemId);
   }
 
   private drawHudVitals(current: number, max: number) {
@@ -646,6 +657,7 @@ export default class HubScene extends Phaser.Scene {
   destroy() {
     this.unlisten.forEach((fn) => fn());
     this.chatUI?.destroy();
+    this.inventoryUI?.destroy();
   }
 
   private updateEntityDepth(sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite, offset = 0) {
