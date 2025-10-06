@@ -24,7 +24,7 @@ const gameServer = new Server({
   })
 });
 
-gameServer.define("game", GameRoom, { map: "hub" }).filterBy("map");
+gameServer.define("game", GameRoom, { map: "hub" }).filterBy(["map"]);
 
 gameServer.listen(port);
 
