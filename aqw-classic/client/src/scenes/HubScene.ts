@@ -22,7 +22,13 @@ type PlayerEntity = {
 
 type MonsterEntity = {
   sprite: Phaser.GameObjects.Image;
-  label: Phaser.GameObjects.Text;
+  nameLabel: Phaser.GameObjects.Text;
+  healthBar: Phaser.GameObjects.Graphics;
+  healthText: Phaser.GameObjects.Text;
+  currentHp: number;
+  maxHp: number;
+  type: string;
+  needsUiRefresh: boolean;
 };
 
 type DropEntity = {
@@ -31,6 +37,16 @@ type DropEntity = {
 
 const MOVE_RATE_MS = 80;
 const INTERPOLATION_SPEED = 0.2;
+const HUD_PANEL_X = 16;
+const HUD_PANEL_Y = 16;
+const HUD_PANEL_WIDTH = 288;
+const HUD_PANEL_HEIGHT = 184;
+const HUD_VITALS_OFFSET_X = 20;
+const HUD_VITALS_OFFSET_Y = 58;
+const HUD_BAR_WIDTH = 220;
+const HUD_BAR_HEIGHT = 16;
+const MONSTER_BAR_WIDTH = 72;
+const MONSTER_BAR_HEIGHT = 10;
 
 export default class HubScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -43,7 +59,9 @@ export default class HubScene extends Phaser.Scene {
   private monsterEntities = new Map<string, MonsterEntity>();
   private dropEntities = new Map<string, DropEntity>();
   private lastMoveSent = 0;
-  private hudText!: Phaser.GameObjects.Text;
+  private hudStatsText!: Phaser.GameObjects.Text;
+  private hudVitalsBar!: Phaser.GameObjects.Graphics;
+  private hudVitalsText!: Phaser.GameObjects.Text;
   private localState?: PlayerState;
   private pendingDrops: Record<string, DropState> = {};
 
@@ -67,12 +85,7 @@ export default class HubScene extends Phaser.Scene {
 
     this.chatUI = new ChatUI();
 
-    this.hudText = this.add.text(16, 16, "Conectando...", {
-      fontSize: "16px",
-      color: "#ffffff",
-      fontFamily: "monospace"
-    });
-    this.hudText.setScrollFactor(0);
+    this.createHud();
 
     await waitForRoom();
 
@@ -165,9 +178,7 @@ export default class HubScene extends Phaser.Scene {
     });
 
     this.monsterEntities.forEach((entity) => {
-      this.updateEntityDepth(entity.sprite);
-      entity.label.setDepth(entity.sprite.depth + 1);
-      this.positionLabel(entity.label, entity.sprite, 8);
+      this.refreshMonsterUi(entity);
     });
   }
 
@@ -178,13 +189,158 @@ export default class HubScene extends Phaser.Scene {
     return drops.find((drop) => Phaser.Math.Distance.Between(player.x, player.y, drop.x, drop.y) < 64) ?? null;
   }
 
+  private createHud() {
+    const background = this.add.graphics();
+    background.setScrollFactor(0);
+    background.setDepth(1000);
+    background.fillStyle(0x050913, 0.88);
+    background.fillRoundedRect(HUD_PANEL_X, HUD_PANEL_Y, HUD_PANEL_WIDTH, HUD_PANEL_HEIGHT, 18);
+    background.lineStyle(2, 0x4cc6ff, 0.75);
+    background.strokeRoundedRect(HUD_PANEL_X, HUD_PANEL_Y, HUD_PANEL_WIDTH, HUD_PANEL_HEIGHT, 18);
+
+    const header = this.add.text(HUD_PANEL_X + 20, HUD_PANEL_Y + 14, "Status do Herói", {
+      fontSize: "18px",
+      color: "#e3f6ff",
+      fontFamily: "monospace"
+    });
+    header.setScrollFactor(0);
+    header.setDepth(1001);
+    header.setShadow(0, 2, "#061830", 0.8);
+
+    const separator = this.add.rectangle(
+      HUD_PANEL_X + HUD_PANEL_WIDTH / 2,
+      HUD_PANEL_Y + 48,
+      HUD_PANEL_WIDTH - 32,
+      2,
+      0x1b3a57,
+      0.9
+    );
+    separator.setScrollFactor(0);
+    separator.setDepth(1001);
+
+    this.hudVitalsBar = this.add.graphics();
+    this.hudVitalsBar.setScrollFactor(0);
+    this.hudVitalsBar.setDepth(1001);
+    this.hudVitalsBar.setPosition(HUD_PANEL_X + HUD_VITALS_OFFSET_X, HUD_PANEL_Y + HUD_VITALS_OFFSET_Y);
+
+    this.hudVitalsText = this.add.text(0, 0, "", {
+      fontSize: "12px",
+      color: "#f5fdff",
+      fontFamily: "monospace"
+    });
+    this.hudVitalsText.setScrollFactor(0);
+    this.hudVitalsText.setDepth(1002);
+    this.hudVitalsText.setOrigin(0.5, 0.5);
+    this.hudVitalsText.setShadow(0, 1, "#0b263f", 0.75);
+
+    this.hudStatsText = this.add.text(HUD_PANEL_X + 20, HUD_PANEL_Y + 100, "Conectando...", {
+      fontSize: "14px",
+      color: "#cde9ff",
+      fontFamily: "monospace",
+      lineSpacing: 6
+    });
+    this.hudStatsText.setScrollFactor(0);
+    this.hudStatsText.setDepth(1001);
+
+    this.drawHudVitals(0, 1);
+    this.positionHudVitalsText(
+      HUD_PANEL_X + HUD_VITALS_OFFSET_X,
+      HUD_PANEL_Y + HUD_VITALS_OFFSET_Y,
+      0,
+      1
+    );
+  }
+
   private updateHud() {
     if (!this.localState) return;
-    const inventory = this.localState.inventory.join(", ") || "(vazio)";
-    this.hudText.setText(
-      `Jogador: ${this.localState.name}\nHP: ${this.localState.hp}/${this.localState.maxHp}\nATK: ${this.localState.atk}` +
-        `\nXP: ${this.localState.xp} | Gold: ${this.localState.gold}\nEquipado: ${this.localState.equippedItemId ?? "Nenhum"}\nInventário: ${inventory}`
+    const { name, hp, maxHp, atk, xp, gold, equippedItemId, inventory } = this.localState;
+    const inventoryText = inventory.join(", ") || "(vazio)";
+
+    this.drawHudVitals(hp, maxHp);
+    this.positionHudVitalsText(
+      HUD_PANEL_X + HUD_VITALS_OFFSET_X,
+      HUD_PANEL_Y + HUD_VITALS_OFFSET_Y,
+      hp,
+      maxHp
     );
+
+    const statsLines = [
+      `Jogador: ${name}`,
+      `ATK: ${atk}`,
+      `XP: ${xp} | Gold: ${gold}`,
+      `Equipado: ${equippedItemId ?? "Nenhum"}`,
+      `Inventário: ${inventoryText}`
+    ];
+    this.hudStatsText.setText(statsLines.join("\n"));
+  }
+
+  private drawHudVitals(current: number, max: number) {
+    const ratio = max > 0 ? Phaser.Math.Clamp(current / max, 0, 1) : 0;
+    this.hudVitalsBar.clear();
+    this.hudVitalsBar.fillStyle(0x14263b, 0.95);
+    this.hudVitalsBar.fillRoundedRect(0, 0, HUD_BAR_WIDTH, HUD_BAR_HEIGHT, 8);
+    this.hudVitalsBar.lineStyle(1, 0x58d6ff, 0.85);
+    this.hudVitalsBar.strokeRoundedRect(0, 0, HUD_BAR_WIDTH, HUD_BAR_HEIGHT, 8);
+
+    if (ratio > 0) {
+      const innerWidth = (HUD_BAR_WIDTH - 6) * ratio;
+      this.hudVitalsBar.fillStyle(0x29e37f, 1);
+      this.hudVitalsBar.fillRoundedRect(3, 3, innerWidth, HUD_BAR_HEIGHT - 6, 6);
+    }
+  }
+
+  private positionHudVitalsText(x: number, y: number, current: number, max: number) {
+    this.hudVitalsText.setPosition(x + HUD_BAR_WIDTH / 2, y + HUD_BAR_HEIGHT / 2);
+    this.hudVitalsText.setText(`HP ${current}/${max}`);
+  }
+
+  private refreshMonsterUi(entity: MonsterEntity, forceRedraw = false) {
+    const sprite = entity.sprite;
+    this.updateEntityDepth(sprite);
+
+    const top = sprite.y - sprite.displayHeight * sprite.originY;
+    const barCenterY = top - 10;
+    const centerX = sprite.x;
+    const nameY = barCenterY - MONSTER_BAR_HEIGHT / 2 - 6;
+
+    entity.nameLabel.setText(entity.type);
+    entity.nameLabel.setPosition(centerX, nameY);
+    entity.nameLabel.setDepth(sprite.depth + 2);
+
+    this.positionMonsterHealthBar(entity.healthBar, centerX, barCenterY);
+    entity.healthBar.setDepth(sprite.depth + 1);
+
+    if (forceRedraw || entity.needsUiRefresh) {
+      this.drawMonsterHealthBar(entity.healthBar, entity.currentHp, entity.maxHp);
+      entity.healthText.setText(`${entity.currentHp}/${entity.maxHp}`);
+      entity.needsUiRefresh = false;
+    }
+
+    entity.healthText.setPosition(centerX, barCenterY);
+    entity.healthText.setDepth(sprite.depth + 2);
+  }
+
+  private positionMonsterHealthBar(
+    graphics: Phaser.GameObjects.Graphics,
+    centerX: number,
+    centerY: number
+  ) {
+    graphics.setPosition(centerX - MONSTER_BAR_WIDTH / 2, centerY - MONSTER_BAR_HEIGHT / 2);
+  }
+
+  private drawMonsterHealthBar(graphics: Phaser.GameObjects.Graphics, current: number, max: number) {
+    const ratio = max > 0 ? Phaser.Math.Clamp(current / max, 0, 1) : 0;
+    graphics.clear();
+    graphics.fillStyle(0x2c1216, 0.9);
+    graphics.fillRoundedRect(0, 0, MONSTER_BAR_WIDTH, MONSTER_BAR_HEIGHT, 4);
+    graphics.lineStyle(1, 0xff92a3, 0.85);
+    graphics.strokeRoundedRect(0, 0, MONSTER_BAR_WIDTH, MONSTER_BAR_HEIGHT, 4);
+
+    if (ratio > 0) {
+      const innerWidth = (MONSTER_BAR_WIDTH - 4) * ratio;
+      graphics.fillStyle(0xff4c61, 1);
+      graphics.fillRoundedRect(2, 2, innerWidth, MONSTER_BAR_HEIGHT - 4, 3);
+    }
   }
 
   private updatePlayerAnimation(player: PlayerState, entity: PlayerEntity, force = false) {
@@ -304,30 +460,56 @@ export default class HubScene extends Phaser.Scene {
         sprite.setScale(0.35);
         sprite.setOrigin(0.5, 0.88);
         this.updateEntityDepth(sprite);
-        const label = this.add
+        const nameLabel = this.add
           .text(monster.x, monster.y, monster.type, {
             fontSize: "12px",
-            color: "#ffb3b3",
+            color: "#ffdede",
             fontFamily: "monospace"
           })
           .setOrigin(0.5, 1);
-        label.setDepth(sprite.depth + 1);
-        this.positionLabel(label, sprite, 8);
-        entity = { sprite, label };
+        nameLabel.setShadow(0, 1, "#29060b", 0.85);
+
+        const healthBar = this.add.graphics();
+        const healthText = this.add.text(monster.x, monster.y, "", {
+          fontSize: "10px",
+          color: "#ffe5e8",
+          fontFamily: "monospace"
+        });
+        healthText.setOrigin(0.5, 0.5);
+        healthText.setShadow(0, 1, "#29060b", 0.8);
+
+        entity = {
+          sprite,
+          nameLabel,
+          healthBar,
+          healthText,
+          currentHp: monster.hp,
+          maxHp: monster.maxHp,
+          type: monster.type,
+          needsUiRefresh: true
+        };
         this.monsterEntities.set(monster.id, entity);
-      } else {
-        entity.sprite.setPosition(monster.x, monster.y);
       }
-      this.updateEntityDepth(entity.sprite);
-      entity.label.setText(`${monster.type} (${monster.hp}/${monster.maxHp})`);
-      entity.label.setDepth(entity.sprite.depth + 1);
-      this.positionLabel(entity.label, entity.sprite, 8);
+      entity.sprite.setPosition(monster.x, monster.y);
+      if (
+        entity.currentHp !== monster.hp ||
+        entity.maxHp !== monster.maxHp ||
+        entity.type !== monster.type
+      ) {
+        entity.currentHp = monster.hp;
+        entity.maxHp = monster.maxHp;
+        entity.type = monster.type;
+        entity.needsUiRefresh = true;
+      }
+      this.refreshMonsterUi(entity, entity.needsUiRefresh);
       monsterIds.delete(monster.id);
     });
     monsterIds.forEach((id) => {
       const entity = this.monsterEntities.get(id);
       entity?.sprite.destroy();
-      entity?.label.destroy();
+      entity?.nameLabel.destroy();
+      entity?.healthBar.destroy();
+      entity?.healthText.destroy();
       this.monsterEntities.delete(id);
     });
 
