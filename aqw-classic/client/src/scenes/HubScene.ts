@@ -11,10 +11,13 @@ import ChatUI from "../ui/ChatUI";
 import type { DropState, PlayerState, Snapshot } from "../types";
 
 type PlayerEntity = {
-  sprite: Phaser.GameObjects.Image;
+  sprite: Phaser.GameObjects.Sprite;
   label: Phaser.GameObjects.Text;
   targetX: number;
   targetY: number;
+  currentAnim: string;
+  isActionLocked: boolean;
+  onActionComplete?: () => void;
 };
 
 type MonsterEntity = {
@@ -135,12 +138,14 @@ export default class HubScene extends Phaser.Scene {
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.attackKey)) {
+      this.triggerLocalAction("player-attack");
       sendAttack();
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       const drop = this.findDropNearPlayer();
       if (drop) {
+        this.triggerLocalAction("player-pickup");
         requestPickup(drop.id);
       }
     }
@@ -182,6 +187,62 @@ export default class HubScene extends Phaser.Scene {
     );
   }
 
+  private updatePlayerAnimation(player: PlayerState, entity: PlayerEntity, force = false) {
+    const sprite = entity.sprite;
+    if (entity.isActionLocked && !force) {
+      if (player.dir === "left") {
+        sprite.setFlipX(true);
+      } else if (player.dir === "right") {
+        sprite.setFlipX(false);
+      }
+      return;
+    }
+
+    if (player.dir === "left") {
+      sprite.setFlipX(true);
+    } else if (player.dir === "right") {
+      sprite.setFlipX(false);
+    }
+
+    const shouldRun = player.dir !== "idle";
+    const nextKey = shouldRun ? "player-run" : "player-idle";
+    if (force || entity.currentAnim !== nextKey) {
+      if (force) {
+        sprite.anims.play(nextKey);
+      } else {
+        sprite.anims.play(nextKey, true);
+      }
+      entity.currentAnim = nextKey;
+    }
+  }
+
+  private triggerLocalAction(key: "player-attack" | "player-pickup") {
+    const sessionId = getSessionId();
+    const entity = this.playerEntities.get(sessionId);
+    if (!entity) {
+      return;
+    }
+
+    const sprite = entity.sprite;
+    if (entity.onActionComplete) {
+      sprite.off(Phaser.Animations.Events.ANIMATION_COMPLETE, entity.onActionComplete);
+    }
+
+    entity.isActionLocked = true;
+    entity.currentAnim = key;
+    sprite.anims.play(key);
+    const callback = () => {
+      entity.isActionLocked = false;
+      entity.onActionComplete = undefined;
+      const localState = this.localState;
+      if (localState) {
+        this.updatePlayerAnimation(localState, entity, true);
+      }
+    };
+    entity.onActionComplete = callback;
+    sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, callback);
+  }
+
   private syncState(snapshot: Snapshot) {
     const sessionId = getSessionId();
 
@@ -190,9 +251,10 @@ export default class HubScene extends Phaser.Scene {
     Object.values(snapshot.players).forEach((player) => {
       let entity = this.playerEntities.get(player.id);
       if (!entity) {
-        const sprite = this.add.image(player.x, player.y, "player");
+        const sprite = this.add.sprite(player.x, player.y, "player");
         sprite.setScale(0.4);
         sprite.setOrigin(0.5, 0.88);
+        sprite.anims.play("player-idle");
         this.updateEntityDepth(sprite);
         const label = this.add
           .text(player.x, player.y, player.name, {
@@ -203,7 +265,14 @@ export default class HubScene extends Phaser.Scene {
           .setOrigin(0.5, 1);
         label.setDepth(sprite.depth + 1);
         this.positionLabel(label, sprite);
-        entity = { sprite, label, targetX: player.x, targetY: player.y };
+        entity = {
+          sprite,
+          label,
+          targetX: player.x,
+          targetY: player.y,
+          currentAnim: "player-idle",
+          isActionLocked: false
+        };
         this.playerEntities.set(player.id, entity);
       }
       entity.targetX = player.x;
@@ -216,6 +285,7 @@ export default class HubScene extends Phaser.Scene {
         this.localState = player;
         this.cameras.main.startFollow(entity.sprite, false, 0.08, 0.08);
       }
+      this.updatePlayerAnimation(player, entity);
       existingIds.delete(player.id);
     });
     existingIds.forEach((id) => {
@@ -291,11 +361,15 @@ export default class HubScene extends Phaser.Scene {
     this.chatUI?.destroy();
   }
 
-  private updateEntityDepth(sprite: Phaser.GameObjects.Image, offset = 0) {
+  private updateEntityDepth(sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite, offset = 0) {
     sprite.setDepth(sprite.y + offset);
   }
 
-  private positionLabel(label: Phaser.GameObjects.Text, sprite: Phaser.GameObjects.Image, padding = 12) {
+  private positionLabel(
+    label: Phaser.GameObjects.Text,
+    sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite,
+    padding = 12
+  ) {
     const top = sprite.y - sprite.displayHeight * sprite.originY;
     label.setPosition(sprite.x, top - padding);
   }

@@ -114,6 +114,22 @@ Comentários in-line destacam pontos de ampliação. Recomendações gerais:
 
 ## Arte
 
-- Pack **Kenney Isometric Miniature Dungeon** (CC0): copie manualmente `player.png`, `monster.png`, `drop.png` e `ground-tile.png` para `client/public/assets/kenney`.
-- O diretório inclui `README.txt` com a lista de arquivos esperados e `LICENSE.txt` do pack; mantenha ambos junto aos sprites.
-- Os nomes dos arquivos devem permanecer exatamente como listados para que o carregamento na `BootScene` funcione.
+Os sprites binários não são versionados. Adicione manualmente a pasta `client/public/assets` antes de rodar o cliente:
+
+- **Personagem principal (`char.png`)** – sprite sheet de 12 quadros (256×256 px) com corrida, ataque e coleta.
+- **Itens dropados (`drop.png`)** – ícone usado nos objetos coletáveis.
+- **Monstro (`monster.png`)** – sprite estático do inimigo do hub.
+- **Chão (`ground-tile.png`)** – tile base do mapa.
+
+O diretório `client/public/assets/kenney` já contém `LICENSE.txt` e `README.txt` originais do pack Kenney; mantenha-os ao lado dos sprites.
+
+> Os nomes dos arquivos precisam permanecer exatamente como listados para que o carregamento na `BootScene` funcione.
+
+### Como versionar PNGs
+
+1. Coloque os arquivos dentro de `aqw-classic/client/public/assets/` (ou subpastas).
+2. Rode `git status` para confirmar que o PNG aparece como "untracked".
+3. Adicione-o ao repositório com `git add caminho/do/arquivo.png`.
+4. Faça o commit normalmente (`git commit -m "Adiciona novo sprite"`).
+
+> **Dica:** não há bloqueio para binários; se o PNG não aparecer no `git status`, verifique se o nome foi escrito corretamente e se não existe nenhuma entrada em `.gitignore` correspondendo ao caminho.
